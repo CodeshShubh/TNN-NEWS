@@ -8,7 +8,7 @@ export interface TUser extends Document {
     role: "user" | "admin" | "superadmin",
     category?:string[],
     status:boolean,
-}
+} 
 
 const userSchema = new Schema<TUser>({
      name:{
