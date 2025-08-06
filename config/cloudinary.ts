@@ -1,6 +1,4 @@
-import dotenv from 'dotenv'
-dotenv.config();
-
+import '../config/config.loadENV.js';
 import {v2 as cloudinary} from 'cloudinary'
 
 
@@ -10,11 +8,7 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-console.log("Cloudinary ENV:", {
-  name: process.env.CLOUDINARY_CLOUD_NAME,
-  key: process.env.CLOUDINARY_API_KEY,
-  secret: process.env.CLOUDINARY_API_SECRET ? "✔️ loaded" : "❌ missing"
-});
+
 
 
 export default cloudinary;

@@ -1,11 +1,11 @@
-import dotenv from 'dotenv'
+import './config/config.loadENV.js';
 import express, { Request, Response } from 'express';
 import { dB } from './db/db.connection.js';
 
 import userRoutes from './routes/user.routes.js'
 import adminRoutes from './routes/article.routes.js'
 
-dotenv.config(); // must first
+
 const app = express();
 
 
@@ -16,7 +16,7 @@ app.use(express.json())
 
 
 app.use('/user',userRoutes)
-app.use('/admin',adminRoutes)
+app.use('/articles',adminRoutes)
 
 // check
 app.get('/',(req:Request, res:Response)=>{

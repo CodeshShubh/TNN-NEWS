@@ -37,6 +37,10 @@ const articleSchema = new Schema<TArticle>({
         type:mongoose.Schema.Types.ObjectId,
         ref:'User'
     },
+    category:{
+        type:String,
+        required:[true, "Please Select One Category"]
+    },
     views:{
         type:Number,
         default:0

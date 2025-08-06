@@ -1,9 +1,12 @@
+import '../config/config.loadENV.js';
 import { Request, Response } from "express";
 import { User } from "../models/user.models.js";
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 
 const JWT_SECRET = process.env.JWT_SECRET || "secret"
+
+console.log('userSecrate', JWT_SECRET)
 
 export const register = async(req:Request, res:Response)=>{
  try {

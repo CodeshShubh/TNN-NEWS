@@ -1,3 +1,4 @@
+import '../config/config.loadENV.js';
 import {Request, Response, NextFunction,} from 'express'
 import jwt from 'jsonwebtoken'
 
@@ -5,7 +6,9 @@ interface AuthRequest extends Request {
     user?:any;
 }
 
-const JWT_SECRET = process.env.JWT_SECRET || 'secret'
+// this will work proprly without 
+const JWT_SECRET = process.env.JWT_SECRET || 'secret' 
+
 
 export const VerifyToken = (req:AuthRequest, res:Response, next:NextFunction)=>{
      const authHeader = req.headers.authorization;
@@ -18,12 +21,12 @@ export const VerifyToken = (req:AuthRequest, res:Response, next:NextFunction)=>{
 
       try {
         const decode = jwt.verify(token,JWT_SECRET);
-
+      
         req.user = decode;
         next();
         
-      } catch (error) {
-        return res.status(401).json({ message: 'Invalid token' });
+      } catch (error:any) {
+        return res.status(401).json({Success:false, message: 'Invalid token',  Error: error.message });
       }
 
 }
