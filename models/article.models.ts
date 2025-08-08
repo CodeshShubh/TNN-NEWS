@@ -1,5 +1,10 @@
 import mongoose, { Document, Schema } from "mongoose";
 
+export interface TComment{
+    user:mongoose.Types.ObjectId;
+    text:string,
+    createdAt?:Date
+}
 
 export interface TArticle extends Document{
     title:string,
@@ -11,6 +16,7 @@ export interface TArticle extends Document{
     author:mongoose.Types.ObjectId,
     views:number,
     likes:mongoose.Types.ObjectId[],
+    comments:TComment[]
 
 }
 
@@ -48,7 +54,25 @@ const articleSchema = new Schema<TArticle>({
     likes:[{
          type:mongoose.Schema.Types.ObjectId,
          ref:'User'
-    }]
+    }],
+    comments:[
+        {
+            user:{
+                type:mongoose.Schema.Types.ObjectId,
+                ref:'User',
+                required:true
+            },
+            text:{
+                type:String,
+                required:true,
+            },
+            createdAt:{
+                type:Date,
+                default:Date.now
+            }
+        }
+
+    ]
 
 },{timestamps:true})
 

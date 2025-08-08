@@ -1,19 +1,20 @@
 import { NextFunction, Request, Response } from "express";
 import { User } from "../models/user.models.js";
+import { AuthRequest } from "../types/authRequest.types.js";
 
-
-
-interface AdminRequest extends Request {
-  user?: any;
-  userCategory?:any;
-}
 
 export const adminVerify = async (
-  req: AdminRequest,
+  req: AuthRequest,
   res: Response,
   next: NextFunction
 ) => {
   try {
+     if (!req.user) {
+      return res.status(401).json({
+        Status: false,
+        Message: "Unauthorized: Token decoded but user data missing",
+      });
+    }
     let user = await User.findById(req.user.id);
 
     if (user?.role !== "admin")

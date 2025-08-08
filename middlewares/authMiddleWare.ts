@@ -1,10 +1,7 @@
 import '../config/config.loadENV.js';
 import {Request, Response, NextFunction,} from 'express'
 import jwt from 'jsonwebtoken'
-
-interface AuthRequest extends Request {
-    user?:any;
-}
+import { AuthRequest, jwtPayload } from '../types/authRequest.types.js';
 
 // this will work proprly without 
 const JWT_SECRET = process.env.JWT_SECRET || 'secret' 
@@ -20,7 +17,7 @@ export const VerifyToken = (req:AuthRequest, res:Response, next:NextFunction)=>{
       const token = authHeader.split(' ')[1];
 
       try {
-        const decode = jwt.verify(token,JWT_SECRET);
+        const decode = jwt.verify(token,JWT_SECRET) as jwtPayload;
       
         req.user = decode;
         next();
