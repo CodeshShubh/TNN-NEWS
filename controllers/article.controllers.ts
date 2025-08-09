@@ -8,15 +8,24 @@ import mongoose from "mongoose";
 
 export const writeArticle = async (req: AuthRequest, res: Response) => {
   try {
-    const { title, content, translatedContent, category, videoUrl } =
-      req.body || {};
+    const {
+      title,
+      content,
+      translatedContent,
+      category,
+      subCategory,
+      videoUrl,
+    } = req.body || {};
 
     // const image = req.file?.path || "";
 
-    if (!title || !content || !translatedContent || !category)
+    if (!title || !content || !subCategory || !translatedContent || !category)
       return res
         .status(400)
-        .json({ Success: false, Message: "Pleas Enter Article First" });
+        .json({
+          Success: false,
+          Message: "Pleas Enter All Article Options First",
+        });
 
     if (!req.user) {
       return res
@@ -45,12 +54,24 @@ export const writeArticle = async (req: AuthRequest, res: Response) => {
 
     let imageUrl = "";
     if (req.file) {
+      console.log("File received:", req.file);
       const fileDataUri = getDataURi(req.file);
-      const result = await cloudinary.uploader.upload(fileDataUri, {
-        folder: "TNN-News",
-        resource_type: "image",
-      });
-      imageUrl = result.secure_url;
+      console.log("Data URI length:", fileDataUri.length);
+      try {
+        const result = await cloudinary.uploader.upload(fileDataUri, {
+          folder: "TNN-News",
+          resource_type: "image",
+          timeout: 60000 // 60 sec
+        });
+        imageUrl = result.secure_url;
+      } catch (uploadErr) {
+        console.error("Cloudinary upload failed:", uploadErr);
+        return res.status(500).json({
+          Success: false,
+          Message: "Image upload failed",
+          Error: uploadErr,
+        });
+      }
     }
 
     const article = await Article.create({
@@ -60,6 +81,7 @@ export const writeArticle = async (req: AuthRequest, res: Response) => {
       image: imageUrl,
       videoUrl,
       category,
+      subCategory,
       author: user._id,
       views: 0,
       likes: [],
@@ -68,6 +90,30 @@ export const writeArticle = async (req: AuthRequest, res: Response) => {
     return res
       .status(201)
       .json({ Success: true, Message: "Article posted", article });
+  } catch (error) {
+    return res
+      .status(500)
+      .json({ Success: false, Message: "Server Error", Error: error });
+  }
+};
+
+// delete Article
+
+export const deleteArticle = async (req: AuthRequest, res: Response) => {
+  try {
+    const { articleId } = req.params;
+
+    const article = await Article.findByIdAndDelete(articleId);
+
+    if (!article) {
+      return res
+        .status(404)
+        .json({ Success: false, Message: "Article not found" });
+    }
+
+    return res
+      .status(200)
+      .json({ Success: true, Message: "Article Deleted", article });
   } catch (error) {
     return res
       .status(500)
@@ -149,7 +195,7 @@ export const likeArticle = async (req: AuthRequest, res: Response) => {
     if (existUser.role !== "user") {
       return res
         .status(403)
-        .json({ Success: false, Message: "Only users can like articles" });
+        .json({ Success: false, Message: "Only users can like articles not admin" });
     }
 
     if (!article)
@@ -228,7 +274,7 @@ export const addComment = async (req: AuthRequest, res: Response) => {
     const { articleId } = req.params;
     const { text } = req.body;
 
-    const article = await Article.findById(articleById);
+    const article = await Article.findById(articleId);
 
     if (!text)
       return res.status(400).json({
@@ -255,5 +301,115 @@ export const addComment = async (req: AuthRequest, res: Response) => {
     return res
       .status(500)
       .json({ Success: false, Message: "Error adding comment", Error: error });
+  }
+};
+
+// deleted Comments
+
+export const deleteComment = async (req: AuthRequest, res: Response) => {
+  try {
+    const { articleId, commentId } = req.params;
+
+    const article = await Article.findById(articleId);
+
+    if (!article)
+      return res
+        .status(404)
+        .json({ Success: false, Message: "article not Found" });
+
+    const comment = article.comments.find((c) => c._id.toString() == commentId);
+
+    if (!comment)
+      return res
+        .status(404)
+        .json({ Success: false, Message: "Comment not found" });
+
+    article.comments.pull(comment._id);
+
+    await article.save();
+
+    return res
+      .status(200)
+      .json({
+        Success: true,
+        Message: "Comment deleted successfully",
+        article,
+      });
+  } catch (error) {
+    return res
+      .status(500)
+      .json({
+        Success: false,
+        Message: "Failed to delete comment",
+        Error: error,
+      });
+  }
+};
+
+// addViews
+
+export const addViews = async (req: AuthRequest, res: Response) => {
+  try {
+    const { articleId } = req.params;
+
+    const article = await Article.findById(articleId);
+
+    if (!article)
+      return res
+        .status(404)
+        .json({ Success: false, Message: "article not Found" });
+
+    article.views += 1;
+
+    await article.save();
+
+    return res
+      .status(200)
+      .json({ Success: true, Message: "View inc by one", article });
+  } catch (error) {
+    return res
+      .status(500)
+      .json({ Success: false, Message: "Failed to add Views", Error: error });
+  }
+};
+
+// dashboard Stats ->
+
+export const getAdminStats = async (req: AuthRequest, res: Response) => {
+  try {
+    const totalArticles = await Article.countDocuments();
+    const totalUsers = await User.countDocuments();
+
+    const articles = await Article.find();
+
+    const articleCategoryCount = articles.map((item) => item.category);
+
+         const categoryCount = [...new Set(articleCategoryCount)]
+
+    const totalLikes = articles.reduce(
+      (acc, item) => acc + item.likes.length,
+      0
+    );
+
+    const totalViews = articles.reduce(
+      (acc, item) => acc + (item.views || 0),
+      0
+    );
+
+    res.status(200).json({
+      Success: true,
+      Message: "Stats Fetch Succesfully",
+      stats: {
+        totalArticles,
+        totalUsers,
+        categoryCount,
+        totalLikes,
+        totalViews,
+      },
+    });
+  } catch (error) {
+    return res
+      .status(500)
+      .json({ Success: false, Message: "Failed to fetch stats", Error: error });
   }
 };
