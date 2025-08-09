@@ -1,0 +1,333 @@
+import { User } from "../models/user.models.js";
+import { Article } from "../models/article.models.js";
+import { getDataURi } from "../utils/multer.dataURI.js";
+import cloudinary from "../config/cloudinary.js";
+import mongoose from "mongoose";
+export const writeArticle = async (req, res) => {
+    try {
+        const { title, content, translatedContent, category, subCategory, videoUrl, } = req.body || {};
+        // const image = req.file?.path || "";
+        if (!title || !content || !subCategory || !translatedContent || !category)
+            return res
+                .status(400)
+                .json({
+                Success: false,
+                Message: "Pleas Enter All Article Options First",
+            });
+        if (!req.user) {
+            return res
+                .status(404)
+                .json({ Success: false, Message: "req.user passed by MiddleWare" });
+        }
+        const user = await User.findById(req.user.id);
+        if (!user)
+            return res
+                .status(404)
+                .json({ Success: false, Message: "User not found" });
+        if (user.role == "admin") {
+            if (!user.category?.includes("all") &&
+                !user.category?.includes(category)) {
+                return res.status(403).json({
+                    Success: false,
+                    Message: "Not authorized for this category",
+                });
+            }
+        }
+        let imageUrl = "";
+        if (req.file) {
+            console.log("File received:", req.file);
+            const fileDataUri = getDataURi(req.file);
+            console.log("Data URI length:", fileDataUri.length);
+            try {
+                const result = await cloudinary.uploader.upload(fileDataUri, {
+                    folder: "TNN-News",
+                    resource_type: "image",
+                    timeout: 60000 // 60 sec
+                });
+                imageUrl = result.secure_url;
+            }
+            catch (uploadErr) {
+                console.error("Cloudinary upload failed:", uploadErr);
+                return res.status(500).json({
+                    Success: false,
+                    Message: "Image upload failed",
+                    Error: uploadErr,
+                });
+            }
+        }
+        const article = await Article.create({
+            title,
+            content,
+            translatedContent,
+            image: imageUrl,
+            videoUrl,
+            category,
+            subCategory,
+            author: user._id,
+            views: 0,
+            likes: [],
+        });
+        return res
+            .status(201)
+            .json({ Success: true, Message: "Article posted", article });
+    }
+    catch (error) {
+        return res
+            .status(500)
+            .json({ Success: false, Message: "Server Error", Error: error });
+    }
+};
+// delete Article
+export const deleteArticle = async (req, res) => {
+    try {
+        const { articleId } = req.params;
+        const article = await Article.findByIdAndDelete(articleId);
+        if (!article) {
+            return res
+                .status(404)
+                .json({ Success: false, Message: "Article not found" });
+        }
+        return res
+            .status(200)
+            .json({ Success: true, Message: "Article Deleted", article });
+    }
+    catch (error) {
+        return res
+            .status(500)
+            .json({ Success: false, Message: "Server Error", Error: error });
+    }
+};
+// get All articles
+export const getAllArticles = async (req, res) => {
+    try {
+        const articles = await Article.find()
+            .populate("author", "name email role")
+            .sort({ createdAt: -1 });
+        res.status(200).json({
+            Success: true,
+            Count: articles.length,
+            Articles: articles,
+        });
+    }
+    catch (error) {
+        res.status(500).json({
+            Success: false,
+            Message: "Failed to fetch articles",
+            Error: error,
+        });
+    }
+};
+// get Single Article by id
+export const articleById = async (req, res) => {
+    try {
+        let { id } = req.params;
+        const article = await Article.findById(id).populate("author", "name -_id");
+        if (!article)
+            return res.status(404).json({
+                Success: false,
+                Message: "Article Removed Or Not Available",
+            });
+        return res.status(200).json({
+            Success: true,
+            Message: "Article Fetched",
+            article,
+        });
+    }
+    catch (error) {
+        return res.status(200).json({
+            Success: false,
+            Message: "Failed to Fetched",
+            Error: error,
+        });
+    }
+};
+// Like/Unlike Article
+export const likeArticle = async (req, res) => {
+    try {
+        let { articleId } = req.params;
+        if (!req.user) {
+            return res
+                .status(404)
+                .json({ Success: false, Message: "req.user passed by MiddleWare" });
+        }
+        const existUser = await User.findById(req.user.id);
+        const article = await Article.findById(articleId);
+        if (!existUser)
+            return res.status(404).json({
+                Success: false,
+                Message: "Please login first for Like",
+            });
+        if (existUser.role !== "user") {
+            return res
+                .status(403)
+                .json({ Success: false, Message: "Only users can like articles not admin" });
+        }
+        if (!article)
+            return res.status(404).json({
+                Success: false,
+                Message: "Article not found Or Removed",
+            });
+        const alreadyLiked = article.likes.includes(existUser.id);
+        if (alreadyLiked) {
+            article.likes = article.likes.filter((id) => id.toString() !== existUser.id.toString());
+        }
+        else {
+            article.likes.push(new mongoose.Types.ObjectId(req.user.id));
+        }
+        await article.save();
+        res.status(200).json({
+            Success: true,
+            Message: alreadyLiked ? "Unlike Article" : "Liked Article",
+            Likes: article.likes.length,
+        });
+    }
+    catch (error) {
+        res.status(500).json({
+            Success: false,
+            Message: "Failed to like article",
+            Error: error,
+        });
+    }
+};
+// get filtered article
+export const getFilteredArticles = async (req, res) => {
+    const { search, category, page = 1, limit = 10 } = req.query;
+    const query = {};
+    if (category) {
+        query.category = category;
+    }
+    if (search) {
+        query.$or = [
+            { title: { $regex: search, $options: "i" } },
+            { content: { $regex: search, $options: "i" } },
+        ];
+    }
+    const skip = (Number(page) - 1) * Number(limit);
+    const articles = await Article.find(query)
+        .skip(skip)
+        .limit(Number(limit))
+        .sort({ createdAt: -1 })
+        .populate("author", "name email");
+    const total = await Article.countDocuments(query);
+    res.status(200).json({
+        Success: true,
+        Count: articles.length,
+        Total: total,
+        Page: Number(page),
+        Articles: articles,
+    });
+};
+// add comment
+export const addComment = async (req, res) => {
+    try {
+        const { articleId } = req.params;
+        const { text } = req.body;
+        const article = await Article.findById(articleId);
+        if (!text)
+            return res.status(400).json({
+                Success: false,
+                Message: "Enter Comment First",
+            });
+        if (!article)
+            return res.status(400).json({
+                Success: false,
+                Message: "Article not found",
+            });
+        article.comments.push({
+            user: new mongoose.Types.ObjectId(req.user?.id),
+            text,
+        });
+        article.save();
+        return res
+            .status(200)
+            .json({ Success: true, Message: "Comment added", Article: article });
+    }
+    catch (error) {
+        return res
+            .status(500)
+            .json({ Success: false, Message: "Error adding comment", Error: error });
+    }
+};
+// deleted Comments
+export const deleteComment = async (req, res) => {
+    try {
+        const { articleId, commentId } = req.params;
+        const article = await Article.findById(articleId);
+        if (!article)
+            return res
+                .status(404)
+                .json({ Success: false, Message: "article not Found" });
+        const comment = article.comments.find((c) => c._id.toString() == commentId);
+        if (!comment)
+            return res
+                .status(404)
+                .json({ Success: false, Message: "Comment not found" });
+        article.comments.pull(comment._id);
+        await article.save();
+        return res
+            .status(200)
+            .json({
+            Success: true,
+            Message: "Comment deleted successfully",
+            article,
+        });
+    }
+    catch (error) {
+        return res
+            .status(500)
+            .json({
+            Success: false,
+            Message: "Failed to delete comment",
+            Error: error,
+        });
+    }
+};
+// addViews
+export const addViews = async (req, res) => {
+    try {
+        const { articleId } = req.params;
+        const article = await Article.findById(articleId);
+        if (!article)
+            return res
+                .status(404)
+                .json({ Success: false, Message: "article not Found" });
+        article.views += 1;
+        await article.save();
+        return res
+            .status(200)
+            .json({ Success: true, Message: "View inc by one", article });
+    }
+    catch (error) {
+        return res
+            .status(500)
+            .json({ Success: false, Message: "Failed to add Views", Error: error });
+    }
+};
+// dashboard Stats ->
+export const getAdminStats = async (req, res) => {
+    try {
+        const totalArticles = await Article.countDocuments();
+        const totalUsers = await User.countDocuments();
+        const articles = await Article.find();
+        const articleCategoryCount = articles.map((item) => item.category);
+        const categoryCount = [...new Set(articleCategoryCount)];
+        const totalLikes = articles.reduce((acc, item) => acc + item.likes.length, 0);
+        const totalViews = articles.reduce((acc, item) => acc + (item.views || 0), 0);
+        res.status(200).json({
+            Success: true,
+            Message: "Stats Fetch Succesfully",
+            stats: {
+                totalArticles,
+                totalUsers,
+                categoryCount,
+                totalLikes,
+                totalViews,
+            },
+        });
+    }
+    catch (error) {
+        return res
+            .status(500)
+            .json({ Success: false, Message: "Failed to fetch stats", Error: error });
+    }
+};
